@@ -1,59 +1,76 @@
-import rumps
+from PyQt5.QtWidgets import QSystemTrayIcon, QMenu, QApplication
+from PyQt5.QtCore import QTimer
 from datetime import datetime, timedelta
 from .time_tracker import TimeTracker
 from .window_manager import WindowManager
 from .storage import Storage
-from .icons import ICON_ACTIVE, ICON_INACTIVE
 
-class ProductivityApp(rumps.App):
+class ProductivityApp:
     def __init__(self):
-        super().__init__("Productivity", icon=ICON_INACTIVE)
+        self.app = QApplication.instance() or QApplication([])
 
         # Initialize components
         self.storage = Storage()
         self.time_tracker = TimeTracker(self.storage)
         self.window_manager = WindowManager(time_tracker=self.time_tracker)
 
-        # Setup menu items
-        self.timer_button = rumps.MenuItem("Auto-tracking Active", callback=self.toggle_timer)
-        self.lock_window_button = rumps.MenuItem("Lock Window", callback=self.toggle_window_lock)
-        self.stats_button = rumps.MenuItem("Show Statistics", callback=self.show_stats)
-
-        # Add menu items
-        self.menu = [
-            self.timer_button,
-            self.lock_window_button,
-            None,  # Separator
-            self.stats_button
-        ]
+        # Create system tray icon
+        self.tray = QSystemTrayIcon()
+        self.create_menu()
+        self.tray.setIcon(self.create_icon(True))
+        self.tray.show()
 
         # State
-        self.is_tracking = True  # Start with auto-tracking enabled
+        self.is_tracking = True
         self.window_locked = False
-        self.icon = ICON_ACTIVE
 
-    def toggle_timer(self, sender):
-        if not self.is_tracking:
-            self.timer_button.title = "Auto-tracking Active"
-            self.icon = ICON_ACTIVE
-            self.is_tracking = True
+    def create_icon(self, active):
+        from PyQt5.QtGui import QIcon, QPixmap, QPainter, QColor
+        pixmap = QPixmap(22, 22)
+        pixmap.fill(QColor(0, 0, 0, 0))
+        painter = QPainter(pixmap)
+        color = QColor("green") if active else QColor("gray")
+        painter.setBrush(color)
+        painter.drawEllipse(6, 6, 10, 10)
+        painter.end()
+        return QIcon(pixmap)
+
+    def create_menu(self):
+        menu = QMenu()
+
+        self.timer_action = menu.addAction("Auto-tracking Active")
+        self.timer_action.triggered.connect(self.toggle_timer)
+
+        self.lock_action = menu.addAction("Lock Window")
+        self.lock_action.triggered.connect(self.toggle_window_lock)
+
+        menu.addSeparator()
+
+        stats_action = menu.addAction("Show Statistics")
+        stats_action.triggered.connect(self.show_stats)
+
+        self.tray.setContextMenu(menu)
+
+    def toggle_timer(self):
+        self.is_tracking = not self.is_tracking
+        if self.is_tracking:
+            self.timer_action.setText("Auto-tracking Active")
+            self.tray.setIcon(self.create_icon(True))
         else:
-            self.time_tracker.stop()  # Stop any ongoing tracking
-            self.timer_button.title = "Auto-tracking Disabled"
-            self.icon = ICON_INACTIVE
-            self.is_tracking = False
+            self.time_tracker.stop()
+            self.timer_action.setText("Auto-tracking Disabled")
+            self.tray.setIcon(self.create_icon(False))
 
-    def toggle_window_lock(self, sender):
-        if not self.window_locked:
+    def toggle_window_lock(self):
+        self.window_locked = not self.window_locked
+        if self.window_locked:
             self.window_manager.lock_current_window()
-            self.lock_window_button.title = "Unlock Window"
-            self.window_locked = True
+            self.lock_action.setText("Unlock Window")
         else:
             self.window_manager.unlock_current_window()
-            self.lock_window_button.title = "Lock Window"
-            self.window_locked = False
+            self.lock_action.setText("Lock Window")
 
-    def show_stats(self, _):
+    def show_stats(self):
         stats = self.time_tracker.get_statistics()
         total_time = timedelta(seconds=stats['total_seconds'])
         today_time = timedelta(seconds=stats['today_seconds'])
@@ -63,8 +80,12 @@ class ProductivityApp(rumps.App):
             f"Today's tracked time: {today_time}\n"
             f"Sessions today: {stats['sessions_today']}"
         )
-        rumps.notification(
-            title="Productivity Statistics",
-            subtitle="Time Tracking Summary",
-            message=message
+        self.tray.showMessage(
+            "Productivity Statistics",
+            message,
+            QSystemTrayIcon.Information,
+            5000
         )
+
+    def run(self):
+        self.app.exec_()
