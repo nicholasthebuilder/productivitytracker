@@ -75,11 +75,30 @@ class ProductivityApp:
         total_time = timedelta(seconds=stats['total_seconds'])
         today_time = timedelta(seconds=stats['today_seconds'])
 
+        # Format system stats
+        system_stats = stats['system_stats']
+        total_system_time = timedelta(seconds=system_stats['total_time'])
+        inactive_time = timedelta(seconds=system_stats['inactive_time'])
+        active_time = timedelta(seconds=system_stats['active_time'])
+
+        # Format browser stats
+        browser_stats = []
+        for domain, seconds in system_stats['browser_stats'].items():
+            browser_stats.append(f"{domain}: {timedelta(seconds=seconds)}")
+
         message = (
-            f"Total tracked time: {total_time}\n"
-            f"Today's tracked time: {today_time}\n"
-            f"Sessions today: {stats['sessions_today']}"
+            f"Productive Time:\n"
+            f"- Total tracked: {total_time}\n"
+            f"- Today's tracked: {today_time}\n"
+            f"- Sessions today: {stats['sessions_today']}\n\n"
+            f"System Activity (24h):\n"
+            f"- Total time: {total_system_time}\n"
+            f"- Active time: {active_time}\n"
+            f"- Inactive time: {inactive_time}\n\n"
+            f"Browser Activity:\n"
+            + "\n".join(browser_stats)
         )
+
         self.tray.showMessage(
             "Productivity Statistics",
             message,
