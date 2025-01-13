@@ -1,9 +1,13 @@
 from PyQt5.QtWidgets import QSystemTrayIcon, QMenu, QApplication
-from PyQt5.QtCore import QTimer
+from PyQt5.QtCore import QTimer, QPoint
+from PyQt5.QtGui import QIcon, QPixmap, QPainter, QColor
 from datetime import datetime, timedelta
 from .time_tracker import TimeTracker
 from .window_manager import WindowManager
 from .storage import Storage
+from .icons import ICON_ACTIVE, ICON_INACTIVE
+import cairosvg
+import io
 
 class ProductivityApp:
     def __init__(self):
@@ -14,10 +18,11 @@ class ProductivityApp:
         self.time_tracker = TimeTracker(self.storage)
         self.window_manager = WindowManager(time_tracker=self.time_tracker)
 
-        # Create system tray icon
+        # Create system tray icon with improved styling
         self.tray = QSystemTrayIcon()
         self.create_menu()
         self.tray.setIcon(self.create_icon(True))
+        self.tray.activated.connect(self.handle_tray_activation)
         self.tray.show()
 
         # State
@@ -25,18 +30,48 @@ class ProductivityApp:
         self.window_locked = False
 
     def create_icon(self, active):
-        from PyQt5.QtGui import QIcon, QPixmap, QPainter, QColor
-        pixmap = QPixmap(22, 22)
-        pixmap.fill(QColor(0, 0, 0, 0))
-        painter = QPainter(pixmap)
-        color = QColor("green") if active else QColor("gray")
-        painter.setBrush(color)
-        painter.drawEllipse(6, 6, 10, 10)
-        painter.end()
+        """Create icon from SVG with proper scaling"""
+        svg_data = ICON_ACTIVE if active else ICON_INACTIVE
+        png_data = cairosvg.svg2png(bytestring=svg_data.encode(), scale=2.0)
+        pixmap = QPixmap()
+        pixmap.loadFromData(png_data)
         return QIcon(pixmap)
+
+    def handle_tray_activation(self, reason):
+        """Handle tray icon click to show menu as dropdown"""
+        if reason == QSystemTrayIcon.Trigger:
+            menu = self.tray.contextMenu()
+            # Position the menu below the icon
+            pos = self.get_tray_position()
+            menu.popup(pos)
+
+    def get_tray_position(self):
+        """Get position for dropdown menu below the tray icon"""
+        geo = self.tray.geometry()
+        return QPoint(geo.x(), geo.y() + geo.height())
 
     def create_menu(self):
         menu = QMenu()
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: white;
+                border: 1px solid #CCCCCC;
+                border-radius: 6px;
+                padding: 4px;
+            }
+            QMenu::item {
+                padding: 8px 24px;
+                border-radius: 4px;
+            }
+            QMenu::item:selected {
+                background-color: #E8E8E8;
+            }
+            QMenu::separator {
+                height: 1px;
+                background: #E8E8E8;
+                margin: 4px 0px;
+            }
+        """)
 
         self.timer_action = menu.addAction("Auto-tracking Active")
         self.timer_action.triggered.connect(self.toggle_timer)
